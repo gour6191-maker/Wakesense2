@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'WakeSense-GitHub-Ready-v0.2.1.zip'
+      - 'WakeSense-v022-GitHub-Source.zip'
       - '.github/workflows/android-build.yml'
 
 jobs:
@@ -29,14 +29,12 @@ jobs:
 
       - name: Extract WakeSense source
         run: |
-          unzip -o WakeSense-GitHub-Ready-v0.2.1.zip
+          unzip -o WakeSense-v022-GitHub-Source.zip
 
-          
       - name: Fix Android SDK compatibility
         run: |
           sed -i 's/compileSdk = 35/compileSdk = 36/' WakeSense/app/build.gradle.kts
           sed -i 's/version "8.9.1"/version "8.10.1"/' WakeSense/build.gradle.kts
-
 
       - name: Fix Java and Kotlin JVM targets
         run: |
@@ -66,7 +64,6 @@ jobs:
           print("Java and Kotlin targets set to JVM 17")
           PY
 
-          
       - name: Fix Health Connect permission import
         run: |
           python3 - <<'PY'
@@ -87,9 +84,8 @@ jobs:
           )
 
           p.write_text(s)
-          print("Health Connect import and permission callback fixed")
+          print("Health Connect permission import fixed")
           PY
-          
 
       - name: Run unit tests
         run: gradle -p WakeSense :app:testDebugUnitTest
