@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'WakeSense-v022-GitHub-Source.zip'
+      - 'WakeSense-v0.2.3-GitHub-Source.zip'
       - '.github/workflows/android-build.yml'
 
 jobs:
@@ -29,7 +29,8 @@ jobs:
 
       - name: Extract WakeSense source
         run: |
-          unzip -o WakeSense-v022-GitHub-Source.zip
+          unzip -o WakeSense-v0.2.3-GitHub-Source.zip
+          test -f WakeSense/app/build.gradle.kts
 
       - name: Fix Android SDK compatibility
         run: |
@@ -44,24 +45,26 @@ jobs:
           p = Path("WakeSense/app/build.gradle.kts")
           s = p.read_text()
 
-          needle = "    buildFeatures { compose = true }"
+          if "sourceCompatibility = JavaVersion.VERSION_17" not in s:
+              needle = "    buildFeatures { compose = true }"
+              replacement = """    compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
 
-          replacement = """    compileOptions {
-                sourceCompatibility = JavaVersion.VERSION_17
-                targetCompatibility = JavaVersion.VERSION_17
-            }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
 
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+              buildFeatures { compose = true }"""
 
-            buildFeatures { compose = true }"""
+              if needle not in s:
+                  raise SystemExit("Could not find expected build.gradle.kts section")
 
-          if needle not in s:
-              raise SystemExit("Could not find expected build.gradle.kts section")
+              s = s.replace(needle, replacement, 1)
 
-          p.write_text(s.replace(needle, replacement, 1))
-          print("Java and Kotlin targets set to JVM 17")
+          p.write_text(s)
+          print("Java and Kotlin targets checked/set to JVM 17")
           PY
 
       - name: Fix Health Connect permission import
@@ -84,7 +87,7 @@ jobs:
           )
 
           p.write_text(s)
-          print("Health Connect permission import fixed")
+          print("Health Connect permission import checked")
           PY
 
       - name: Run unit tests
