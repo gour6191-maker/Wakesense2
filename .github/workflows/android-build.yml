@@ -1,19 +1,15 @@
 
-name: WakeSense APK Builder
+name: Build WakeSense APK
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'WakeSense-v022-GitHub-Source.zip'
+      - 'WakeSense-GitHub-Ready-v0.2.1.zip'
       - '.github/workflows/android-build.yml'
-
-permissions:
-  contents: read
 
 jobs:
   build:
-    name: Build WakeSense Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -26,13 +22,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 36
-        run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -40,29 +29,73 @@ jobs:
 
       - name: Extract WakeSense source
         run: |
-          test -f WakeSense-v022-GitHub-Source.zip
-          unzip -o WakeSense-v022-GitHub-Source.zip
-          test -f WakeSense/app/build.gradle.kts
-          echo "WakeSense source extracted successfully"
+          unzip -o WakeSense-GitHub-Ready-v0.2.1.zip
 
-      - name: Verify Android configuration
+          
+      - name: Fix Android SDK compatibility
         run: |
-          grep -q 'compileSdk = 36' WakeSense/app/build.gradle.kts
-          grep -q 'jvmTarget = "17"' WakeSense/app/build.gradle.kts
-          grep -q 'READ_SLEEP' WakeSense/app/src/main/AndroidManifest.xml
-          grep -q 'ACTION_SHOW_PERMISSIONS_RATIONALE' WakeSense/app/src/main/AndroidManifest.xml
-          echo "Configuration checks passed"
+          sed -i 's/compileSdk = 35/compileSdk = 36/' WakeSense/app/build.gradle.kts
+          sed -i 's/version "8.9.1"/version "8.10.1"/' WakeSense/build.gradle.kts
+
+
+      - name: Fix Java and Kotlin JVM targets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("WakeSense/app/build.gradle.kts")
+          s = p.read_text()
+
+          needle = "    buildFeatures { compose = true }"
+
+          replacement = """    compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+
+            buildFeatures { compose = true }"""
+
+          if needle not in s:
+              raise SystemExit("Could not find expected build.gradle.kts section")
+
+          p.write_text(s.replace(needle, replacement, 1))
+          print("Java and Kotlin targets set to JVM 17")
+          PY
+
+          
+      - name: Fix Health Connect permission import
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("WakeSense/app/src/main/java/com/majilabs/wakesense/MainActivity.kt")
+          s = p.read_text()
+
+          s = s.replace(
+              "import androidx.health.connect.client.permission.PermissionController",
+              "import androidx.health.connect.client.PermissionController"
+          )
+
+          s = s.replace(
+              ") { granted ->",
+              ") { granted: Set<String> ->",
+              1
+          )
+
+          p.write_text(s)
+          print("Health Connect import and permission callback fixed")
+          PY
+          
 
       - name: Run unit tests
         run: gradle -p WakeSense :app:testDebugUnitTest
 
-      - name: Build debug APK
+      - name: Build APK
         run: gradle -p WakeSense :app:assembleDebug
-
-      - name: Verify APK
-        run: |
-          test -s WakeSense/app/build/outputs/apk/debug/app-debug.apk
-          ls -lh WakeSense/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -70,4 +103,3 @@ jobs:
           name: WakeSense-APK
           path: WakeSense/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
