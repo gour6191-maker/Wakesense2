@@ -1,0 +1,73 @@
+
+name: WakeSense APK Builder
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'WakeSense-v022-GitHub-Source.zip'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build WakeSense Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Extract WakeSense source
+        run: |
+          test -f WakeSense-v022-GitHub-Source.zip
+          unzip -o WakeSense-v022-GitHub-Source.zip
+          test -f WakeSense/app/build.gradle.kts
+          echo "WakeSense source extracted successfully"
+
+      - name: Verify Android configuration
+        run: |
+          grep -q 'compileSdk = 36' WakeSense/app/build.gradle.kts
+          grep -q 'jvmTarget = "17"' WakeSense/app/build.gradle.kts
+          grep -q 'READ_SLEEP' WakeSense/app/src/main/AndroidManifest.xml
+          grep -q 'ACTION_SHOW_PERMISSIONS_RATIONALE' WakeSense/app/src/main/AndroidManifest.xml
+          echo "Configuration checks passed"
+
+      - name: Run unit tests
+        run: gradle -p WakeSense :app:testDebugUnitTest
+
+      - name: Build debug APK
+        run: gradle -p WakeSense :app:assembleDebug
+
+      - name: Verify APK
+        run: |
+          test -s WakeSense/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh WakeSense/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WakeSense-APK
+          path: WakeSense/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
